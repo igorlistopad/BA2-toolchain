@@ -1,0 +1,105 @@
+name: Build BA2 toolchain
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-15
+            artifact: macos-arm64
+          - name: macos-amd64
+            os: macos-15-intel
+            artifact: macos-amd64
+          - name: linux-amd64
+            os: ubuntu-latest
+            artifact: linux-amd64
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install autoconf automake gettext libtool texinfo gawk
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            autoconf automake bison clang flex gawk make \
+            gettext libgmp-dev libmpc-dev libmpfr-dev texinfo xz-utils
+
+      - name: Build toolchain
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          ./Build_toolchain.sh \
+            --prefix "$RUNNER_TEMP/ba-elf-ba2" \
+            --work-dir "$RUNNER_TEMP/ba2-build" \
+            --jobs 2
+
+      - name: Run compiler smoke test
+        run: |
+          cat > "$RUNNER_TEMP/smoke.c" <<'EOF'
+          int main(void) { return 0; }
+          EOF
+          "$RUNNER_TEMP/ba-elf-ba2/bin/ba-elf-gcc" \
+            -c "$RUNNER_TEMP/smoke.c" \
+            -o "$RUNNER_TEMP/smoke.o"
+          "$RUNNER_TEMP/ba-elf-ba2/bin/ba-elf-objdump" -f "$RUNNER_TEMP/smoke.o"
+
+      - name: Package toolchain
+        run: |
+          tar -C "$RUNNER_TEMP" -czf \
+            "$RUNNER_TEMP/ba-elf-ba2-r36379-${{ matrix.artifact }}.tar.gz" \
+            ba-elf-ba2
+
+      - name: Upload toolchain archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: ba-elf-ba2-r36379-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/ba-elf-ba2-r36379-${{ matrix.artifact }}.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub prerelease
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+
+      - name: Download toolchain archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ba-elf-ba2-r36379-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Publish GitHub prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ba2-toolchain-${{ github.ref_name }}-${{ github.run_number }}
+          name: BA2 toolchain ${{ github.ref_name }} #${{ github.run_number }}
+          prerelease: true
+          generate_release_notes: false
+          body_path: release-notes.md
+          files: release-artifacts/*

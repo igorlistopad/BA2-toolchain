@@ -1,0 +1,19 @@
+--- gcc/config/host-darwin.c
++++ gcc/config/host-darwin.c
+@@ -24,1 +24,1 @@
+-static char pch_address_space[1024*1024*1024] __attribute__((aligned (4096)));
++static char pch_address_space[1024*1024*1024] __attribute__((aligned (16384)));
+@@ -75,3 +75,13 @@
+ 
+   return ret;
+ }
++
++#include "hosthooks.h"
++#undef HOST_HOOKS_GT_PCH_GET_ADDRESS
++#undef HOST_HOOKS_GT_PCH_USE_ADDRESS
++#include "hosthooks-def.h"
++#undef HOST_HOOKS_GT_PCH_GET_ADDRESS
++#define HOST_HOOKS_GT_PCH_GET_ADDRESS darwin_gt_pch_get_address
++#undef HOST_HOOKS_GT_PCH_USE_ADDRESS
++#define HOST_HOOKS_GT_PCH_USE_ADDRESS darwin_gt_pch_use_address
++const struct host_hooks host_hooks = HOST_HOOKS_INITIALIZER;

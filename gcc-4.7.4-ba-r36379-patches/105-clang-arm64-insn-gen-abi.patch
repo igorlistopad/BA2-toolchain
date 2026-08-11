@@ -1,0 +1,8 @@
+--- gcc/recog.h
++++ gcc/recog.h
+@@ -258,7 +258,7 @@
+ 
+ typedef int (*insn_operand_predicate_fn) (rtx, enum machine_mode);
+ typedef const char * (*insn_output_fn) (rtx *, rtx);
+-typedef rtx (*insn_gen_fn) (rtx, ...);
++typedef rtx (*insn_gen_fn) ();

@@ -1,0 +1,22 @@
+--- gmp/acinclude.m4
++++ gmp/acinclude.m4
+@@ -3664,7 +3664,9 @@
+ AC_DEFUN([GMP_PROG_CC_FOR_BUILD],
+ [AC_REQUIRE([AC_PROG_CC])
+ if test -n "$CC_FOR_BUILD"; then
++  CC_FOR_BUILD="$CC_FOR_BUILD $CFLAGS $CPPFLAGS"
+   GMP_PROG_CC_FOR_BUILD_WORKS($CC_FOR_BUILD,,
+     [AC_MSG_ERROR([Specified CC_FOR_BUILD doesn't seem to work])])
+ elif test -n "$HOST_CC"; then
++  CC_FOR_BUILD="$HOST_CC $CFLAGS $CPPFLAGS"
+   GMP_PROG_CC_FOR_BUILD_WORKS($HOST_CC,
+@@ -3696,8 +3696,9 @@
+ AC_DEFUN([GMP_PROG_CC_FOR_BUILD_WORKS],
+ [AC_MSG_CHECKING([build system compiler $1])
+ # remove anything that might look like compiler output to our "||" expression
+ rm -f conftest* a.out b.out a.exe a_out.exe
+ cat >conftest.c <<EOF
++#include <stdlib.h>
+ int
+ main ()
+ {

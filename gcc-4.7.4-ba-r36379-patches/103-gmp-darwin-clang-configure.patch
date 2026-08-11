@@ -1,0 +1,15 @@
+--- gmp/configure
++++ gmp/configure
+@@ -8612,10 +8612,12 @@
+ 
+ if test -n "$CC_FOR_BUILD"; then
++  CC_FOR_BUILD="$CC_FOR_BUILD $CFLAGS $CPPFLAGS"
+   { echo "$as_me:$LINENO: checking build system compiler $CC_FOR_BUILD" >&5
+ echo $ECHO_N "checking build system compiler $CC_FOR_BUILD... $ECHO_C" >&6; }
+ # remove anything that might look like compiler output to our "||" expression
+ rm -f conftest* a.out b.out a.exe a_out.exe
+ cat >conftest.c <<EOF
++#include <stdlib.h>
+ int
+ main ()
+ {
