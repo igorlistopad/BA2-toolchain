@@ -1,0 +1,18 @@
+--- gcc/config.host
++++ gcc/config.host
+@@ -241,6 +241,14 @@
+     host_xmake_file="${host_xmake_file} i386/x-cygwin"
+     host_exeext=.exe
+     host_lto_plugin_soname=cyglto_plugin-0.dll
+     ;;
++  x86_64-*-cygwin*)
++    use_long_long_for_widest_fast_int=yes
++    host_xm_file=i386/xm-cygwin.h
++    out_host_hook_obj=host-cygwin.o
++    host_xmake_file="${host_xmake_file} i386/x-cygwin"
++    host_exeext=.exe
++    host_lto_plugin_soname=cyglto_plugin-0.dll
++    ;;
+   i[34567]86-*-mingw32*)
+     host_xm_file=i386/xm-mingw32.h
+     host_xmake_file="${host_xmake_file} i386/x-mingw32"

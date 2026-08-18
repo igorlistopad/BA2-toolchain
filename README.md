@@ -35,5 +35,5 @@ intermediate sources and build directories for debugging. Add the `PATH` line
 to your shell profile to use the toolchain in future sessions.
 
 The same compiler-only build runs in GitHub Actions for macOS ARM64, macOS
-AMD64 and Linux AMD64. Each job publishes a platform-specific
+AMD64, Linux AMD64, Linux ARM64 and Windows AMD64. Each job publishes a platform-specific
 `ba-elf-ba2-r36379-*.tar.gz` artifact.

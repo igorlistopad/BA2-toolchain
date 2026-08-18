@@ -143,6 +143,53 @@ apply_patch_file() {
     (cd "$source_dir" && patch -p0 < "$patch_file")
 }
 
+CONFIG_GUESS=
+CONFIG_SUB=
+for config_dir in \
+    /usr/share/misc \
+    /usr/share/automake-* \
+    /usr/local/share/automake-* \
+    /opt/homebrew/share/automake-* \
+    /usr/share/libtool/build-aux \
+    /usr/share/gettext; do
+    if [[ -f "$config_dir/config.guess" && -f "$config_dir/config.sub" ]]; then
+        CONFIG_GUESS="$config_dir/config.guess"
+        CONFIG_SUB="$config_dir/config.sub"
+        break
+    fi
+done
+
+refresh_config_scripts() {
+    local source_dir=$1
+    local config_script
+    local destination_dir
+    local temporary_sub
+
+    [[ -n "$CONFIG_GUESS" ]] || return 0
+    while IFS= read -r -d '' config_script; do
+        destination_dir=${config_script%/*}
+        case "${config_script##*/}" in
+            config.guess) cp "$CONFIG_GUESS" "$destination_dir/config.guess" ;;
+            config.sub)
+                cp "$CONFIG_SUB" "$destination_dir/config.sub"
+                if ! sh "$destination_dir/config.sub" "$TARGET" >/dev/null 2>&1; then
+                    temporary_sub="$destination_dir/config.sub.ba2"
+                    awk '
+                        !inserted && /\| pdp10/ {
+                            print "\t| ba \134"
+                            inserted=1
+                        }
+                        { print }
+                        END { exit !inserted }
+                    ' "$destination_dir/config.sub" > "$temporary_sub" \
+                        || die "cannot add ${TARGET} to $destination_dir/config.sub"
+                    mv "$temporary_sub" "$destination_dir/config.sub"
+                fi
+                ;;
+        esac
+    done < <(find "$source_dir" -type f \( -name config.guess -o -name config.sub \) -print0)
+}
+
 extract() {
     local archive_file=$1
     local destination=$2
@@ -191,6 +238,16 @@ mv "$WORK_DIR/sources/$MPC_NAME" "$GCC_SOURCE/mpc"
 
 patches "${GCC_NAME}-patches" "$GCC_SOURCE"
 
+# The bundled Autotools metadata predates Linux/aarch64. Refresh every copy
+# before configure when a current pair is available from automake/libtool.
+# Modern config.sub does not know the custom BA target, so restore its alias.
+refresh_config_scripts "$BINUTILS_SOURCE"
+refresh_config_scripts "$GCC_SOURCE"
+
+if [[ -z "$CONFIG_GUESS" && "$(uname -m)" == "aarch64" ]]; then
+    die "current config.guess/config.sub are required to build on aarch64"
+fi
+
 chmod +x "$BINUTILS_SOURCE/configure" "$GCC_SOURCE/configure"
 export PATH="$PREFIX/bin:$PATH"
 
@@ -206,25 +263,34 @@ echo "Configuring binutils for ${TARGET}"
 
 echo "Building and installing binutils"
 make -C "$WORK_DIR/binutils-build" -j"$JOBS"
-make -C "$WORK_DIR/binutils-build" install
+# libiberty's legacy install rule probes the host compiler with
+# -print-multi-os-directory, which Clang does not implement.
+make -C "$WORK_DIR/binutils-build" install MULTIOSDIR=.
 
 echo "Configuring GCC ${GCC_VERSION} for ${TARGET}"
+GCC_CONFIGURE_ARG=
+case "$(uname -s)" in
+    MSYS*|MINGW*|CYGWIN*)
+        # GCC 4.7 ICEs while generating libstdc++ PCHs under MSYS2.
+        GCC_CONFIGURE_ARG=--disable-libstdcxx-pch
+        ;;
+esac
 (
     cd "$WORK_DIR/gcc-build"
     "$GCC_SOURCE/configure" \
         --target="$TARGET" \
         --prefix="$PREFIX" \
-        --enable-languages=c,c++ \
+        --enable-languages=c,c++,lto \
         --with-gnu-as \
         --with-gnu-ld \
         --with-newlib \
         --disable-nls \
         --enable-target-optspace \
-        --disable-lto \
         --disable-libssp \
         --disable-__cxa_atexit \
         --disable-werror \
-        --with-gxx-include-dir="$PREFIX/$TARGET/include"
+        --with-gxx-include-dir="$PREFIX/$TARGET/include" \
+        $GCC_CONFIGURE_ARG
 )
 
 # GCC's top-level configure can regenerate the bundled GMP configure script.

@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-unix:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -25,10 +25,13 @@ jobs:
           - name: linux-amd64
             os: ubuntu-latest
             artifact: linux-amd64
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            artifact: linux-arm64
 
     steps:
       - name: Check out sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install macOS build dependencies
         if: runner.os == 'macOS'
@@ -61,6 +64,13 @@ jobs:
             -c "$RUNNER_TEMP/smoke.c" \
             -o "$RUNNER_TEMP/smoke.o"
           "$RUNNER_TEMP/ba-elf-ba2/bin/ba-elf-objdump" -f "$RUNNER_TEMP/smoke.o"
+          "$RUNNER_TEMP/ba-elf-ba2/bin/ba-elf-gcc" \
+            -flto -c "$RUNNER_TEMP/smoke.c" \
+            -o "$RUNNER_TEMP/smoke-lto.o"
+          "$RUNNER_TEMP/ba-elf-ba2/bin/ba-elf-gcc" \
+            -flto -nostdlib -Wl,-e,main \
+            "$RUNNER_TEMP/smoke-lto.o" \
+            -o "$RUNNER_TEMP/smoke-lto.elf"
 
       - name: Package toolchain
         run: |
@@ -69,37 +79,110 @@ jobs:
             ba-elf-ba2
 
       - name: Upload toolchain archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ba-elf-ba2-r36379-${{ matrix.artifact }}
           path: ${{ runner.temp }}/ba-elf-ba2-r36379-${{ matrix.artifact }}.tar.gz
           if-no-files-found: error
           retention-days: 14
 
+  build-windows:
+    name: windows-amd64
+    runs-on: windows-2025
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v5
+
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          update: true
+          install: >-
+            autoconf
+            automake
+            bison
+            clang
+            flex
+            gawk
+            make
+            patch
+            gettext
+            libtool
+            texinfo
+            xz
+
+      - name: Build toolchain
+        env:
+          CC: clang
+          CXX: clang++
+        shell: 'msys2 {0}'
+        run: |
+          TEMP_DIR="$(cygpath -u "$RUNNER_TEMP")"
+          ./Build_toolchain.sh \
+            --prefix "$TEMP_DIR/ba-elf-ba2" \
+            --work-dir "$TEMP_DIR/ba2-build" \
+            --jobs 2
+
+      - name: Run compiler smoke test
+        shell: 'msys2 {0}'
+        run: |
+          TEMP_DIR="$(cygpath -u "$RUNNER_TEMP")"
+          cat > "$TEMP_DIR/smoke.c" <<'EOF'
+          int main(void) { return 0; }
+          EOF
+          "$TEMP_DIR/ba-elf-ba2/bin/ba-elf-gcc" \
+            -c "$TEMP_DIR/smoke.c" \
+            -o "$TEMP_DIR/smoke.o"
+          "$TEMP_DIR/ba-elf-ba2/bin/ba-elf-objdump" -f "$TEMP_DIR/smoke.o"
+          "$TEMP_DIR/ba-elf-ba2/bin/ba-elf-gcc" \
+            -flto -c "$TEMP_DIR/smoke.c" \
+            -o "$TEMP_DIR/smoke-lto.o"
+          "$TEMP_DIR/ba-elf-ba2/bin/ba-elf-gcc" \
+            -flto -nostdlib -Wl,-e,main \
+            "$TEMP_DIR/smoke-lto.o" \
+            -o "$TEMP_DIR/smoke-lto.elf"
+
+      - name: Package toolchain
+        shell: 'msys2 {0}'
+        run: |
+          TEMP_DIR="$(cygpath -u "$RUNNER_TEMP")"
+          tar -C "$TEMP_DIR" -czf \
+            "$TEMP_DIR/ba-elf-ba2-r36379-windows-amd64.tar.gz" \
+            ba-elf-ba2
+
+      - name: Upload toolchain archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: ba-elf-ba2-r36379-windows-amd64
+          path: ${{ runner.temp }}/ba-elf-ba2-r36379-windows-amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
     name: Publish GitHub prerelease
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: build
+    needs: [build-unix, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Check out sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get short commit SHA
         id: commit
         run: echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Download toolchain archives
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: ba-elf-ba2-r36379-*
           path: release-artifacts
           merge-multiple: true
 
       - name: Publish GitHub prerelease
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ba2-toolchain-${{ steps.commit.outputs.short_sha }}
           name: BA2 toolchain ${{ steps.commit.outputs.short_sha }}
