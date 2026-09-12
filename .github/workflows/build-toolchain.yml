@@ -1,8 +1,6 @@
 name: Build BA2 toolchain
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -23,7 +21,7 @@ jobs:
             os: macos-15-intel
             artifact: macos-amd64
           - name: linux-amd64
-            os: ubuntu-latest
+            os: ubuntu-24.04
             artifact: linux-amd64
           - name: linux-arm64
             os: ubuntu-24.04-arm
@@ -31,7 +29,7 @@ jobs:
 
     steps:
       - name: Check out sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install macOS build dependencies
         if: runner.os == 'macOS'
@@ -51,7 +49,7 @@ jobs:
           CXX: clang++
         run: |
           ./Build_toolchain.sh \
-            --prefix "$RUNNER_TEMP/ba-elf-ba2" \
+            --prefix "$RUNNER_TEMP/ba2-toolchain" \
             --work-dir "$RUNNER_TEMP/ba2-build" \
             --jobs 2
 
@@ -60,14 +58,14 @@ jobs:
           cat > "$RUNNER_TEMP/smoke.c" <<'EOF'
           int main(void) { return 0; }
           EOF
-          "$RUNNER_TEMP/ba-elf-ba2/bin/ba-elf-gcc" \
+          "$RUNNER_TEMP/ba2-toolchain/bin/ba-elf-gcc" \
             -c "$RUNNER_TEMP/smoke.c" \
             -o "$RUNNER_TEMP/smoke.o"
-          "$RUNNER_TEMP/ba-elf-ba2/bin/ba-elf-objdump" -f "$RUNNER_TEMP/smoke.o"
-          "$RUNNER_TEMP/ba-elf-ba2/bin/ba-elf-gcc" \
+          "$RUNNER_TEMP/ba2-toolchain/bin/ba-elf-objdump" -f "$RUNNER_TEMP/smoke.o"
+          "$RUNNER_TEMP/ba2-toolchain/bin/ba-elf-gcc" \
             -flto -c "$RUNNER_TEMP/smoke.c" \
             -o "$RUNNER_TEMP/smoke-lto.o"
-          "$RUNNER_TEMP/ba-elf-ba2/bin/ba-elf-gcc" \
+          "$RUNNER_TEMP/ba2-toolchain/bin/ba-elf-gcc" \
             -flto -nostdlib -Wl,-e,main \
             "$RUNNER_TEMP/smoke-lto.o" \
             -o "$RUNNER_TEMP/smoke-lto.elf"
@@ -75,14 +73,14 @@ jobs:
       - name: Package toolchain
         run: |
           tar -C "$RUNNER_TEMP" -czf \
-            "$RUNNER_TEMP/ba-elf-ba2-r36379-${{ matrix.artifact }}.tar.gz" \
-            ba-elf-ba2
+            "$RUNNER_TEMP/ba2-toolchain-${{ matrix.artifact }}.tar.gz" \
+            ba2-toolchain
 
       - name: Upload toolchain archive
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
-          name: ba-elf-ba2-r36379-${{ matrix.artifact }}
-          path: ${{ runner.temp }}/ba-elf-ba2-r36379-${{ matrix.artifact }}.tar.gz
+          name: ba2-toolchain-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/ba2-toolchain-${{ matrix.artifact }}.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -91,7 +89,7 @@ jobs:
     runs-on: windows-2025
     steps:
       - name: Check out sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up MSYS2
         uses: msys2/setup-msys2@v2
@@ -120,7 +118,7 @@ jobs:
         run: |
           TEMP_DIR="$(cygpath -u "$RUNNER_TEMP")"
           ./Build_toolchain.sh \
-            --prefix "$TEMP_DIR/ba-elf-ba2" \
+            --prefix "$TEMP_DIR/ba2-toolchain" \
             --work-dir "$TEMP_DIR/ba2-build" \
             --jobs 2
 
@@ -131,14 +129,14 @@ jobs:
           cat > "$TEMP_DIR/smoke.c" <<'EOF'
           int main(void) { return 0; }
           EOF
-          "$TEMP_DIR/ba-elf-ba2/bin/ba-elf-gcc" \
+          "$TEMP_DIR/ba2-toolchain/bin/ba-elf-gcc" \
             -c "$TEMP_DIR/smoke.c" \
             -o "$TEMP_DIR/smoke.o"
-          "$TEMP_DIR/ba-elf-ba2/bin/ba-elf-objdump" -f "$TEMP_DIR/smoke.o"
-          "$TEMP_DIR/ba-elf-ba2/bin/ba-elf-gcc" \
+          "$TEMP_DIR/ba2-toolchain/bin/ba-elf-objdump" -f "$TEMP_DIR/smoke.o"
+          "$TEMP_DIR/ba2-toolchain/bin/ba-elf-gcc" \
             -flto -c "$TEMP_DIR/smoke.c" \
             -o "$TEMP_DIR/smoke-lto.o"
-          "$TEMP_DIR/ba-elf-ba2/bin/ba-elf-gcc" \
+          "$TEMP_DIR/ba2-toolchain/bin/ba-elf-gcc" \
             -flto -nostdlib -Wl,-e,main \
             "$TEMP_DIR/smoke-lto.o" \
             -o "$TEMP_DIR/smoke-lto.elf"
@@ -148,27 +146,26 @@ jobs:
         run: |
           TEMP_DIR="$(cygpath -u "$RUNNER_TEMP")"
           tar -C "$TEMP_DIR" -czf \
-            "$TEMP_DIR/ba-elf-ba2-r36379-windows-amd64.tar.gz" \
-            ba-elf-ba2
+            "$TEMP_DIR/ba2-toolchain-windows-amd64.tar.gz" \
+            ba2-toolchain
 
       - name: Upload toolchain archive
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
-          name: ba-elf-ba2-r36379-windows-amd64
-          path: ${{ runner.temp }}/ba-elf-ba2-r36379-windows-amd64.tar.gz
+          name: ba2-toolchain-windows-amd64
+          path: ${{ runner.temp }}/ba2-toolchain-windows-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
 
   publish:
     name: Publish GitHub prerelease
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: [build-unix, build-windows]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - name: Check out sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Get short commit SHA
         id: commit
@@ -177,7 +174,7 @@ jobs:
       - name: Download toolchain archives
         uses: actions/download-artifact@v8
         with:
-          pattern: ba-elf-ba2-r36379-*
+          pattern: ba2-toolchain-*
           path: release-artifacts
           merge-multiple: true
 
@@ -185,8 +182,26 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ba2-toolchain-${{ steps.commit.outputs.short_sha }}
+          target_commitish: ${{ github.sha }}
           name: BA2 toolchain ${{ steps.commit.outputs.short_sha }}
           prerelease: true
           generate_release_notes: false
-          body_path: release-notes.md
-          files: release-artifacts/*
+          body: |
+            BA2 cross-toolchain for NXP JN516x firmware development.
+
+            Includes:
+
+            - GCC 4.7.4 with C, C++ and LTO support
+            - GNU Binutils 2.22
+            - Newlib 2.0.0
+            - Compatibility patch for legacy NXP LTO libraries
+
+            Available platforms:
+
+            - macOS: AMD64, ARM64
+            - Linux: AMD64, ARM64
+            - Windows: AMD64
+
+            Each archive contains a `ba2-toolchain/` directory.
+            Compiler executable: `bin/ba-elf-gcc` (`.exe` on Windows).
+          files: release-artifacts/*.tar.gz

@@ -26,14 +26,15 @@ workflow do not install or use a host GCC.
 ## Build
 
 ```
-./Build_toolchain.sh --prefix "$HOME/toolchains/ba-elf-ba2"
-export PATH="$HOME/toolchains/ba-elf-ba2/bin:$PATH"
+./Build_toolchain.sh --prefix "$HOME/toolchains/ba2-toolchain"
+export PATH="$HOME/toolchains/ba2-toolchain/bin:$PATH"
 ```
 
 Use `--jobs N` to control parallelism and `--keep-work` to preserve the
 intermediate sources and build directories for debugging. Add the `PATH` line
 to your shell profile to use the toolchain in future sessions.
 
-The same compiler-only build runs in GitHub Actions for macOS ARM64, macOS
-AMD64, Linux AMD64, Linux ARM64 and Windows AMD64. Each job publishes a platform-specific
-`ba-elf-ba2-r36379-*.tar.gz` artifact.
+The same compiler-only build can be started manually in GitHub Actions for
+macOS AMD64, macOS ARM64, Linux AMD64, Linux ARM64 and Windows AMD64.
+Each build job uploads a platform-specific `ba2-toolchain-*.tar.gz` artifact
+containing a `ba2-toolchain/` directory.
